@@ -1,0 +1,101 @@
+import streamlit as st
+import pandas as pd
+from datetime import date
+import os
+
+# ==========================================
+# 1. KONFIGURASI & SETUP
+# ==========================================
+CSV_FILE = 'data_kehadiran.csv'
+ANGGOTA_TIM = ['Andy', 'Rakha', 'Amar', 'Agil', 'Satrio'] # Sesuaikan dengan nama tim
+
+def init_db():
+    """Inisialisasi database CSV jika belum ada (Best Practice: Defensive Programming)."""
+    if not os.path.exists(CSV_FILE):
+        df = pd.DataFrame(columns=['Tanggal', 'Nama', 'Status', 'Waktu_Absen'])
+        df.to_csv(CSV_FILE, index=False)
+
+def load_data():
+    """Memuat data historis dari CSV."""
+    return pd.read_csv(CSV_FILE)
+
+def save_data(df):
+    """Menyimpan pembaruan data ke CSV."""
+    df.to_csv(CSV_FILE, index=False)
+
+# ==========================================
+# 2. LOGIKA BISNIS (Business Logic)
+# ==========================================
+def catat_kehadiran(nama, tanggal, status):
+    """Fungsi untuk mencatat atau memperbarui status kehadiran seseorang."""
+    df = load_data()
+    waktu_sekarang = pd.Timestamp.now().strftime("%H:%M:%S")
+    
+    # Cek apakah orang tersebut sudah absen di hari yang sama
+    mask = (df['Tanggal'] == str(tanggal)) & (df['Nama'] == nama)
+    
+    if mask.any():
+        # Update jika sudah ada (mungkin dia meralat absensi)
+        df.loc[mask, 'Status'] = status
+        df.loc[mask, 'Waktu_Absen'] = waktu_sekarang
+    else:
+        # Tambah entri baru jika belum ada
+        data_baru = pd.DataFrame({
+            'Tanggal': [str(tanggal)], 
+            'Nama': [nama], 
+            'Status': [status],
+            'Waktu_Absen': [waktu_sekarang]
+        })
+        df = pd.concat([df, data_baru], ignore_index=True)
+    
+    save_data(df)
+
+# ==========================================
+# 3. ANTARMUKA PENGGUNA (UI / Frontend)
+# ==========================================
+def main():
+    # Setup halaman agar terlihat estetis dan rapi
+    st.set_page_config(page_title="Vibes Attendance", page_icon="✨", layout="centered")
+    
+    # Inisialisasi DB saat aplikasi pertama kali dijalankan
+    init_db()
+
+    st.title("✨ Vibes Attendance Tracker")
+    st.markdown("Sistem monitoring kehadiran harian yang simpel dan elegan.")
+    st.divider()
+
+    # Bagian Input Kehadiran Hari Ini
+    st.subheader("📅 Absensi Hari Ini")
+    hari_ini = st.date_input("Pilih Tanggal:", date.today())
+    
+    st.write("Silakan klik tombol di bawah untuk menyatakan kehadiran:")
+    
+    # Membuat grid/kolom agar tampilan tombol rapi seperti di aplikasi modern
+    cols = st.columns(3) 
+    
+    for idx, nama in enumerate(ANGGOTA_TIM):
+        col = cols[idx % 3] # Distribusi tombol ke dalam 3 kolom
+        with col:
+            # Jika tombol ditekan, catat ke CSV
+            if st.button(f"👋 {nama} Hadir", key=nama, use_container_width=True):
+                catat_kehadiran(nama, hari_ini, "Hadir")
+                st.success(f"{nama} berhasil absen!")
+
+    st.divider()
+
+    # Bagian Monitoring Historis (Spreadsheet view)
+    st.subheader("📊 Monitoring Historis Kehadiran")
+    df_historis = load_data()
+    
+    if not df_historis.empty:
+        # Menampilkan data dalam bentuk tabel interaktif yang bisa di-sort
+        st.dataframe(
+            df_historis.sort_values(by=['Tanggal', 'Waktu_Absen'], ascending=[False, False]),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("Belum ada data kehadiran. Ayo mulai absen!")
+
+if __name__ == "__main__":
+    main()
